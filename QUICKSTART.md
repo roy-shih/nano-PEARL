@@ -45,14 +45,27 @@ python3 -m nano_pearl.serve.launch \
 
 | 參數 | 說明 | 推薦值 |
 |------|------|--------|
+| **模型配置** | | |
 | `--model-path` | Target 模型路徑 | 必填 |
 | `--draft-model-path` | Draft 模型路徑 | 必填 |
-| `--draft-tp-size` | Draft TP 大小 | 1 |
 | `--target-tp-size` | Target TP 大小 | 4-8 |
+| `--draft-tp-size` | Draft TP 大小 | 1 |
+| **效能配置** | | |
 | `--gamma` | 投機步長 | -1 (自動) |
 | `--max-num-batched-tokens` | 批次大小 | 16384 |
 | `--max-running-requests` | 最大並發數 | 256 |
-| `--port` | 服務埠號 | 8000 |
+| **Cache 配置** | | |
+| `--use-radix-cache` | 使用 Radix Tree（預設） | 推薦 |
+| `--no-use-radix-cache` | 使用 Hash-based Cache | 可選 |
+| **服務配置** | | |
+| `--host` | 監聽位址 | 127.0.0.1 |
+| `--port` | 埠號 | 8000 |
+| `--mem-fraction-static` | 記憶體佔用比例 | 0.9 |
+
+> 💡 **Cache 模式選擇**：
+> - **Radix Tree**（預設）：適合多輪對話與高並發場景，快取命中率高
+> - **Hash-based**：簡單穩定，記憶體開銷低，適合單次請求
+> - 詳細比較請參考 [CACHE_MODES.md](CACHE_MODES.md)
 
 ## 🧪 測試 API
 
@@ -99,13 +112,25 @@ curl http://localhost:8000/v1/chat/completions \
 1. 執行自動 Gamma 調整（`--gamma -1`）
 2. 增加 Target TP 大小
 3. 檢查 Acceptance Rate（日誌中的 `num_acc_tokens`）
+4. 根據場景選擇合適的 Cache 模式
+
+### Q4: 該用哪種 Cache 模式？
+**Radix Tree 模式**（推薦給）：
+- 多輪對話應用（Chat API）
+- 高並發環境（>50 並發）
+- 共享 System Prompt 的場景
+
+**Hash-based 模式**（推薦給）：
+- 單次請求（Completions API）
+- 低並發環境（<10 並發）
+- 記憶體受限環境（<40GB）
 
 ## 📊 效能監控
 
 服務啟動後會自動輸出：
 - Draft/Target 模型載入狀態
 - 自動 Gamma 測量結果
-- KV Cache 容量
+- KV Cache 容量與模式
 - 請求處理統計
 
 ## 🛑 停止服務

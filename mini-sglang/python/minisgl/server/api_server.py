@@ -252,16 +252,24 @@ async def v1_completions(req: OpenAICompletionRequest):
 
     # TODO: support more sampling parameters
     uid = state.new_user()
-    await state.send_one(
-        TokenizeMsg(
-            uid=uid,
-            text=prompt,
-            sampling_params=SamplingParams(
-                ignore_eos=req.ignore_eos,
-                max_tokens=req.max_tokens,
-            ),
+
+    # Add logging to help debug stuck/no-response cases
+    logger.info("v1/chat/completions: received request uid=%s prompt_type=%s", uid, "messages" if isinstance(prompt, list) else "prompt")
+    try:
+        await state.send_one(
+            TokenizeMsg(
+                uid=uid,
+                text=prompt,
+                sampling_params=SamplingParams(
+                    ignore_eos=req.ignore_eos,
+                    max_tokens=req.max_tokens,
+                ),
+            )
         )
-    )
+        logger.info("v1/chat/completions: TokenizeMsg sent for uid=%s", uid)
+    except Exception as exc:  # catch and log any send failures
+        logger.exception("v1/chat/completions: failed to send TokenizeMsg for uid=%s: %s", uid, exc)
+        raise
 
     async def _abort():
         await state.abort_user(uid)

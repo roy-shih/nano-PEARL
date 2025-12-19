@@ -178,6 +178,7 @@ class PearlScheduler:
         # We implement a synchronous loop using ZMQ directly to avoid async complexity 
         # mixing with PEARL sync engine, if possible.
         import zmq
+        import msgpack
         
         context = zmq.Context()
         receiver = context.socket(zmq.PULL)
@@ -219,8 +220,9 @@ class PearlScheduler:
                 
                 # ZMQ Recv
                 raw_msg = receiver.recv()
-                # Decode
-                msg = BatchBackendMsg.decoder(raw_msg)
+                # Decode using msgpack
+                json = msgpack.unpackb(raw_msg, raw=False)
+                msg = BatchBackendMsg.decoder(json)
                 
                 if isinstance(msg, ExitMsg):
                     break
@@ -293,9 +295,9 @@ class PearlScheduler:
                                 del self.sid_to_uid[sid]
                     
                     if replies:
-                        # Send batch
+                        # Send batch (pack with msgpack)
                         batch_reply = BatchTokenizerMsg(data=replies)
-                        sender.send(BatchTokenizerMsg.encoder(batch_reply))
+                        sender.send(msgpack.packb(BatchTokenizerMsg.encoder(batch_reply), use_bin_type=True))
                 else:
                     # No output? verify if finished
                     # If empty output but requests are running, it means they are still processing (gamma steps).

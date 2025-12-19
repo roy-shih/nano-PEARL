@@ -159,7 +159,14 @@ class Scheduler(SchedulerIOMixin):
         elif isinstance(msg, ExitMsg):
             raise KeyboardInterrupt
         elif isinstance(msg, UserMsg):
-            logger.debug_rank0("Received user msg: %s", msg)
+            # Info log to help trace incoming requests and diagnose hangups
+            logger.info_rank0(
+                "Received UserMsg uid=%s input_len=%s max_seq_len=%s sampling_params=%s",
+                msg.uid,
+                len(msg.input_ids),
+                self.engine.max_seq_len,
+                msg.sampling_params,
+            )
             input_len, max_seq_len = len(msg.input_ids), self.engine.max_seq_len
             if input_len >= max_seq_len:
                 return logger.warning_rank0(

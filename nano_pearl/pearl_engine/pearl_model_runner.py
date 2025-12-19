@@ -129,7 +129,20 @@ class ModelRunnerBase:
             else hf_config.hidden_size // hf_config.num_attention_heads
         )
         block_bytes = 2 * hf_config.num_hidden_layers * self.block_size * num_kv_heads * head_dim * hf_config.torch_dtype.itemsize
-        self.global_config.num_kvcache_blocks = int(total * self.global_config.gpu_memory_utilization - used - peak + current) // block_bytes
+        # compute number of blocks and log detailed metrics for debugging allocation differences
+        num_kvcache_blocks = int(total * self.global_config.gpu_memory_utilization - used - peak + current) // block_bytes
+
+        logger.info(
+            f"[Rank {self.rank}: {self.group_name}] GPU mem (total/free/used/peak/current) = {total/2**30:.2f}/{free/2**30:.2f}/{used/2**30:.2f}/{peak/2**30:.2f}/{current/2**30:.2f} GiB"
+        )
+        logger.info(
+            f"[Rank {self.rank}: {self.group_name}] Model (layers/num_kv_heads/head_dim/block_size/dtype_bytes) = {hf_config.num_hidden_layers}/{hf_config.num_key_value_heads}/{head_dim}/{self.block_size}/{hf_config.torch_dtype.itemsize}"
+        )
+        logger.info(
+            f"[Rank {self.rank}: {self.group_name}] Calculated block_bytes={block_bytes} bytes -> num_kvcache_blocks={num_kvcache_blocks} (gpu_memory_util={self.global_config.gpu_memory_utilization})"
+        )
+
+        self.global_config.num_kvcache_blocks = num_kvcache_blocks
         assert self.global_config.num_kvcache_blocks > 0
         self.kv_cache = torch.empty(2, hf_config.num_hidden_layers, self.global_config.num_kvcache_blocks, self.block_size, num_kv_heads, head_dim)
         layer_id = 0
@@ -382,6 +395,8 @@ class ModelRunnerBase:
         if self.rank == 0:
             for idx, b in enumerate(bs):
                 logger.info(f"batch size: {b}, draft speed: {draft_speed[idx].item():.2f} tok/s, target speed: {target_speed[idx].item():.2f} tok/s, gamma: {self.gamma_list[b]}")
+            # Also print the entire gamma map for clarity
+            logger.info(f"Auto-set gamma_map: {self.gamma_list}")
 
         reset_context(self.tp_params)
         torch.cuda.empty_cache()
@@ -417,9 +432,15 @@ class ModelRunnerBase:
         start_time = time.time()
         self.prefill()
 
+        # indicate we are running the PEARL generation path and show current gamma info
+        logger.info(f"[Rank {self.rank}] Entering pearl_generate (PEARL path). initial gamma arg: {self.gamma}, gamma_list: {getattr(self, 'gamma_list', None)}")
+
         # determine the gamma for each batch size
         if self.gamma == -1:
             self.gamma = self.gamma_list[next(x for x in self.gamma_list if x >= len(self.scheduler.running))]
+            logger.info(f"[Rank {self.rank}] Auto-selected gamma: {self.gamma} based on running size {len(self.scheduler.running)}")
+        else:
+            logger.info(f"[Rank {self.rank}] Using provided gamma: {self.gamma}")
 
         while not self.scheduler.is_finished():
             self.pearl_step()

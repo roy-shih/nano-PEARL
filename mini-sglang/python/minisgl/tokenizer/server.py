@@ -45,6 +45,16 @@ def tokenize_worker(
     tokenizer: LlamaTokenizer = AutoTokenizer.from_pretrained(tokenizer_path, use_fast=True)
     logger = init_logger(__name__, f"tokenizer_{tokenizer_id}")
 
+    # Log ZMQ endpoint information for debugging connectivity
+    logger.info(
+        "Tokenizer startup: tokenizer_id=%s addr=%s (create=%s) backend_addr=%s frontend_addr=%s",
+        tokenizer_id,
+        addr,
+        create,
+        backend_addr,
+        frontend_addr,
+    )
+
     from .detokenize import DetokenizeManager
     from .tokenize import TokenizeManager
 
@@ -60,7 +70,9 @@ def tokenize_worker(
             while len(pending_msg) < local_bs and not recv_listener.empty():
                 pending_msg.extend(_unwrap_msg(recv_listener.get()))
 
-            logger.debug(f"Received {len(pending_msg)} messages")
+            # Info-level logs to help trace incoming requests and UIDs
+            uids = [m.uid for m in pending_msg]
+            logger.info(f"Tokenizer received {len(pending_msg)} messages uids={uids}")
 
             detokenize_msg = [m for m in pending_msg if isinstance(m, DetokenizeMsg)]
             tokenize_msg = [m for m in pending_msg if isinstance(m, TokenizeMsg)]
@@ -79,6 +91,7 @@ def tokenize_worker(
                 )
                 if len(batch_output.data) == 1:
                     batch_output = batch_output.data[0]
+                logger.info(f"Tokenizer -> frontend put {len(batch_output.data if isinstance(batch_output, BatchFrontendMsg) else [batch_output])} replies for uids={[r.uid for r in batch_output.data] if isinstance(batch_output, BatchFrontendMsg) else [batch_output.uid]}")
                 send_frontend.put(batch_output)
 
             if len(tokenize_msg) > 0:
@@ -95,6 +108,7 @@ def tokenize_worker(
                 )
                 if len(batch_output.data) == 1:
                     batch_output = batch_output.data[0]
+                logger.info(f"Tokenizer -> backend put {len(batch_output.data if isinstance(batch_output, BatchBackendMsg) else [batch_output])} msgs for uids={[m.uid for m in (batch_output.data if isinstance(batch_output, BatchBackendMsg) else [batch_output]) ]}")
                 send_backend.put(batch_output)
     except KeyboardInterrupt:
         pass

@@ -38,11 +38,14 @@ class SchedulerIOMixin:
                 create=True,
                 decoder=BaseBackendMsg.decoder,
             )
+            logger.info_rank0(f"Scheduler primary: bound recv_from_tokenizer to {config.zmq_backend_addr}")
+
             self._send_into_tokenizer: Final = ZmqPushQueue(
                 config.zmq_detokenizer_addr,
                 create=config.backend_create_detokenizer_link,
                 encoder=BaseTokenizerMsg.encoder,
             )
+            logger.info_rank0(f"Scheduler primary: created send_into_tokenizer to {config.zmq_detokenizer_addr} (create={config.backend_create_detokenizer_link})")
 
         recv = self._recv_msg_single_rank
         send = self._reply_tokenizer_rank0
@@ -121,7 +124,8 @@ class SchedulerIOMixin:
 
     def _reply_tokenizer_rank0(self, reply: BatchTokenizerMsg) -> None:
         num_reply = len(reply.data)
-        logger.debug_rank0(f"Replying to tokenizer: {num_reply} messages")
+        # Promote to INFO so it's visible in standard logs
+        logger.info_rank0(f"Replying to tokenizer: {num_reply} messages")
         if num_reply == 1:
             self._send_into_tokenizer.put(reply.data[0])
         elif num_reply > 1:

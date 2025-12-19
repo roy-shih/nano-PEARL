@@ -10,7 +10,7 @@ license = "MIT"
 license-files = ["LICENSE"]
 readme = "README.md"
 description = "A lightweight parallel speculative decoding implementation in nano-vllm style."
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 
 dependencies = [
     "torch>=2.4.0",

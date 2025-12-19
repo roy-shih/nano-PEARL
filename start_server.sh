@@ -9,8 +9,16 @@ export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5  # 根據實際 GPU 數量調整
 export PYTHONPATH="${PYTHONPATH}:$(pwd):$(pwd)/mini-sglang/python"
 
 # 2. 模型路徑設定（請修改為您的實際路徑）
-DRAFT_MODEL="/path/to/draft/model"    # 例如: meta-llama/Llama-3.2-3B
-TARGET_MODEL="/path/to/target/model"  # 例如: meta-llama/Llama-3.1-70B
+# Prefer local model paths found on this machine (change if needed)
+PYTHON="$(pwd)/.venv/bin/python"
+if [ -x "$PYTHON" ]; then
+  echo "Using Python from virtualenv: $PYTHON"
+else
+  PYTHON=python3
+fi
+
+DRAFT_MODEL="/home/ubuntu/models/meta-llama/Llama-3.3-8B-Instruct"    # Draft model (smaller)
+TARGET_MODEL="/home/ubuntu/models/meta-llama/Llama-3.3-70B-Instruct"  # Target model (larger)
 
 # 3. 效能參數設定
 DRAFT_TP=1        # Draft Model 的 Tensor Parallelism 大小

@@ -58,6 +58,9 @@ class ZmqPullQueue(Generic[T]):
         create: bool,
         decoder: Callable[[Dict], T],
     ):
+        from minisgl.utils import init_logger
+
+        self.logger = init_logger(__name__, "ZmqPullQueue")
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PULL)
         self.socket.bind(addr) if create else self.socket.connect(addr)
@@ -65,13 +68,29 @@ class ZmqPullQueue(Generic[T]):
 
     def get(self) -> T:
         event = self.socket.recv()
+        try:
+            self.logger.info("ZmqPullQueue.get: received raw message of %d bytes", len(event))
+        except Exception:
+            pass
         return self.decoder(msgpack.unpackb(event, raw=False))
 
     def get_raw(self) -> bytes:
-        return self.socket.recv()
+        raw = self.socket.recv()
+        try:
+            self.logger.info("ZmqPullQueue.get_raw: received %d bytes", len(raw))
+        except Exception:
+            pass
+        return raw
 
     def decode(self, raw: bytes) -> T:
-        return self.decoder(msgpack.unpackb(raw, raw=False))
+        try:
+            obj = msgpack.unpackb(raw, raw=False)
+            self.logger.info("ZmqPullQueue.decode: unpacked object keys=%s", list(obj.keys()) if isinstance(obj, dict) else type(obj))
+            return self.decoder(obj)
+        except Exception as exc:
+            # Log decode error and re-raise to make error visible
+            self.logger.exception("ZmqPullQueue.decode: failed to decode raw message (%d bytes): %s", len(raw), exc)
+            raise
 
     def empty(self) -> bool:
         return self.socket.poll(timeout=0) == 0

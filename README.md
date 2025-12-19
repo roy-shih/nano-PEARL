@@ -101,15 +101,95 @@ curl http://localhost:8000/v1/completions \
 - [QUICKSTART.md](QUICKSTART.md) - Quick start guide with examples  
 - [CACHE_MODES.md](CACHE_MODES.md) - Cache mode comparison & tuning
 
-## 📋 TODOs
+## 📋 TODOs & Roadmap
 
-- [x]  **Dynamic TP Size**: Support dynamic TP size, including TP=6/7, hence the 8 GPUs can be fully used!
-- [x]  **Continuous Batching**: Support continuous batching and chunked prefill. ✅ (Online Serving)
-- [x]  **Online Serving**: OpenAI-compatible API Server with streaming ✅
-- [x]  **Radix Tree KV Cache**: Advanced prefix caching for multi-turn chat ✅
-- [ ]  **Draft Model Temperature**: Support setting a non-zero temperature for the draft model.
-- [ ]  **Adaptive Gamma**: Support dynamic `gamma` tuning based on context size and model's performance.
-- [ ]  **PEARL-2**: Support fine-tuning / distilling a PEARL-specific draft model for further acceleration.
+### ✅ Completed Features
+- [x] **Dynamic TP Size**: Support dynamic TP size, including TP=6/7, hence the 8 GPUs can be fully used!
+- [x] **Continuous Batching**: Support continuous batching and chunked prefill. ✅ (Online Serving)
+- [x] **Online Serving**: OpenAI-compatible API Server with streaming ✅
+- [x] **Radix Tree KV Cache**: Advanced prefix caching for multi-turn chat ✅
+
+### 🚧 In Progress
+
+#### 🎯 Algorithm Enhancements
+- [ ] **Confidence-based Rollback**: 
+  - Leverage draft model's perplexity/confidence scores for smarter rollback decisions
+  - Score range: 1.0 (high confidence, trust draft) → 0.0 (low confidence, trust target)
+  - Adaptive threshold tuning based on historical acceptance rate
+  - Potential 10-15% acceptance rate improvement
+
+- [ ] **Adaptive Gamma Scheduling**: 
+  - Dynamic `gamma` tuning based on context size and model's performance
+  - Auto-adjust per request based on measured acceptance rate
+  - Context-aware gamma selection (longer context → smaller gamma)
+
+#### ⚙️ System Optimization
+- [ ] **Hyperparameter Auto-tuning**:
+  - Integrate Hydra for unified configuration management
+  - Optuna-based auto-tuning for:
+    - Optimal `gamma` per model pair
+    - `max_num_batched_tokens` tuning
+    - KV cache size optimization
+  - Multi-objective optimization (throughput + latency)
+
+- [ ] **Draft Model as Standalone Service**:
+  - Deploy draft model as independent µ-service
+  - Support multiple target models sharing one draft service
+  - Horizontal scaling for draft generation
+  - Load balancing across draft instances
+
+#### 🔧 Infrastructure & Hardware
+- [ ] **TurboMind CUDA Kernel Integration**:
+  - Low-level fused attention kernels
+  - Optimized paged attention for speculative decoding
+  - Expected 20-30% latency reduction
+
+- [ ] **Triton Kernel Support**:
+  - Multi-backend support (NVIDIA, AMD, Intel)
+  - Custom fused kernels for PEARL-specific operations
+  - Platform-agnostic deployment
+
+- [ ] **Prefill-Decode (PD) Disaggregation**:
+  - Separate prefill and decode onto different hardware
+  - Prefill: High-memory GPU cluster
+  - Decode: High-throughput GPU cluster
+  - Better resource utilization for mixed workloads
+
+#### 🧪 Advanced Features
+- [ ] **Draft Model Temperature Control**: 
+  - Support non-zero temperature for draft model
+  - Diverse sampling strategies
+
+- [ ] **Multi-modal Speculative Decoding**:
+  - Image-based speculative decoding
+  - Vision-Language Model (VLM) support
+  - Extend PEARL to multi-modal scenarios
+
+- [ ] **PEARL-2 (Self-Distillation)**:
+  - Fine-tuning/distilling PEARL-specific draft model
+  - Target-aware draft model training
+  - Expected 30-40% acceptance rate improvement
+
+### 💡 Research Directions
+- [ ] **Speculative Decoding for Structured Output**:
+  - JSON schema-guided generation
+  - Grammar-constrained speculative decoding
+  
+- [ ] **Cross-Model Collaboration**:
+  - Multiple draft models voting
+  - Ensemble-based token selection
+
+- [ ] **Hardware-specific Optimizations**:
+  - Apple Silicon (Metal) support
+  - AWS Inferentia/Trainium optimization
+  - Google TPU integration
+
+### 📊 Benchmarking & Evaluation
+- [ ] **Comprehensive Benchmark Suite**:
+  - Multi-domain evaluation (code, math, reasoning)
+  - Latency percentile analysis (P50, P95, P99)
+  - Memory profiling under high concurrency
+
 
 ## 🙏 Acknowledgements
 

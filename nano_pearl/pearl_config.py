@@ -82,6 +82,8 @@ class PEARLConfig:
     num_kvcache_blocks: int = -1
     enforce_eager: bool = False
     gamma: int = -1
+    use_radix_cache: bool = True  # True: Radix Tree, False: Hash-based
+
     def __post_init__(self):
         logger.info("="*50)
         logger.info(f"Loading Draft Config:")

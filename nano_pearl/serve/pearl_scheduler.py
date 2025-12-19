@@ -39,8 +39,10 @@ class PearlSchedulerWrapper:
             max_num_batched_tokens=args.max_num_batched_tokens,
             max_num_seqs=args.max_running_req,
             gamma=args.gamma,
+            use_radix_cache=getattr(args, 'use_radix_cache', True),
             # Others use defaults or map from args if needed
         )
+
         
         # Initialize Engine
         self.engine = PEARLEngine(self.pearl_config)
@@ -167,6 +169,7 @@ class PearlScheduler:
             max_num_batched_tokens=args.max_num_batched_tokens,
             max_num_seqs=args.max_running_req,
             gamma=args.gamma,
+            use_radix_cache=getattr(args, 'use_radix_cache', True),
         )
         self.engine = PEARLEngine(self.pearl_config)
         self.context = None # ZMQ context

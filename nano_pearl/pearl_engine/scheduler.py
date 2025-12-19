@@ -18,7 +18,11 @@ class Scheduler:
         self.max_num_seqs = config.max_num_seqs
         self.max_num_batched_tokens = config.max_num_batched_tokens
         self.eos = config.eos
-        self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
+        self.block_manager = BlockManager(
+            config.num_kvcache_blocks, 
+            config.kvcache_block_size,
+            use_radix_cache=config.use_radix_cache
+        )
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
         self.finished: list[Sequence] = []
@@ -93,3 +97,4 @@ class Scheduler:
         while self.finished:
             seq = self.finished.pop()
             self.block_manager.deallocate(seq)
+        self.block_manager.clear()

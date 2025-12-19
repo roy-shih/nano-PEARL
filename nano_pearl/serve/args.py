@@ -86,6 +86,10 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[PearlServerArg
     extra_parser.add_argument("--target-tp-size", type=int, default=1)
     extra_parser.add_argument("--gamma", type=int, default=-1)
     extra_parser.add_argument("--max-num-batched-tokens", type=int, default=16384)
+    extra_parser.add_argument("--use-radix-cache", action="store_true", default=True,
+                             help="Use Radix Tree KV Cache (default: True). Set --no-use-radix-cache for Hash-based.")
+    extra_parser.add_argument("--no-use-radix-cache", dest="use_radix_cache", action="store_false",
+                             help="Use Hash-based KV Cache instead of Radix Tree")
     
     # We need to parse args again to get these values.
     # Note: parse_server_args consumes known args? No, it uses sys.argv[1:] passed to it.

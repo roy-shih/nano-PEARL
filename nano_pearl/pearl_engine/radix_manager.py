@@ -56,10 +56,20 @@ class RadixTreeNode:
     def is_leaf(self) -> bool:
         return len(self.children) == 0
 
+    def get_match_len(self, input_ids: torch.Tensor) -> int:
+        """
+        Compare the node's key with input_ids and return the length of the matching prefix.
+
+        Args:
+            input_ids: Input token IDs to compare against this node's key
+
+        Returns:
+            Length of the matching prefix
+        """
         # from minisgl.kernel import fast_compare_key
         # compare key and input_ids, find the first diff
         # return fast_compare_key(self._key, input_ids)
-        
+
         # Simple implementation
         min_len = min(len(self._key), len(input_ids))
         diff = (self._key[:min_len] != input_ids[:min_len]).nonzero()

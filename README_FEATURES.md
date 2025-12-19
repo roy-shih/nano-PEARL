@@ -293,6 +293,143 @@ Target███ (verify)███ (verify)███
    驗證 T0    驗證 T1    驗證 T2
 ```
 
+#### 程式碼證據：如何實現非同步流水線
+
+**關鍵 1：獨立的 Process（並行基礎）**
+
+`nano_pearl/pearl_engine/pearl_engine.py:75-80`：
+```python
+for i in range(config.world_size):
+    event = ctx.Event()
+    # 🔥 Draft 和 Target 在不同的 Process 中
+    process = ctx.Process(
+        target=DraftModelRunner if i in config.draft_config.devices 
+               else TargetModelRunner,
+        args=(config, i, event, self.control_event)
+    )
+    process.start()  # ← 獨立進程，可並行運行
+```
+
+**關鍵 2：Draft 連續生成（不等待 Target）**
+
+`nano_pearl/pearl_engine/pearl_model_runner.py:541-558` (DraftModelRunner):
+```python
+def pearl_step(self):
+    # 🔥 Draft 連續生成 gamma 個 Token
+    for _ in range(self.gamma):
+        seqs, is_prefill = self.scheduler.schedule()
+        input_ids, positions = self.prepare_pearl_decode(seqs)
+        logits = self.run_model(input_ids, positions, is_prefill)
+        
+        # Greedy Sampling（降低通訊開銷）
+        sample_tokens = logits.argmax(dim=-1)
+        
+        # 🎯 直接附加到序列，不等待 Target 驗證
+        for seq, token_id in zip(seqs, token_ids):
+            seq.append_token(token_id)  # ← 立即附加，持續生成
+    
+    # 🎯 生成完 gamma 個後才呼叫 verify（與 Target 同步）
+    self.verify(seqs)
+```
+
+**關鍵 3：Target 並行驗證（Pipelined Verification）**
+
+`nano_pearl/pearl_engine/pearl_model_runner.py:639-645` (TargetModelRunner):
+```python
+def pearl_step(self):
+    seqs, is_prefill = self.scheduler.schedule()
+    
+    # 🔥 準備驗證資料（包含 Draft 生成的 gamma 個 Tokens）
+    input_ids, positions, temp_seqs = self.prepare_pearl_decode(seqs)
+    
+    # 🎯 Target 一次驗證 gamma 個 Token（並行計算）
+    logits = self.run_model(input_ids, positions, is_prefill)
+    
+    # 執行驗證決策
+    self.verify(logits, seqs, temperatures)
+```
+
+`prepare_pearl_decode()` 的關鍵邏輯 (Line 624):
+```python
+# 🔥 pre_verify=False 時，驗證的是「上一輪」生成的 Token
+num_tokens = self.gamma if not seq.pre_verify else 1
+to_append_tokens = seq.token_ids[-num_tokens:]  # ← 取最後 gamma 個
+```
+
+**關鍵 4：非阻塞同步（Event-based Coordination）**
+
+`nano_pearl/pearl_engine/pearl_model_runner.py:561-575` (Draft verify):
+```python
+def verify(self, seqs: list[Sequence]):
+    # 1. Draft 將生成的 Token 發送給 Target
+    msg = torch.tensor(
+        to_be_verified_tokens + next_round_input, 
+        dtype=torch.int64, device="cuda"
+    )
+    dist.broadcast(msg, src=self.rank, group=self.verify_group)
+    
+    # 2. 🔥 等待 Target 返回驗證結果（非阻塞等待）
+    verify_res = torch.zeros((4, len(seqs)), dtype=torch.int64, device="cuda")
+    dist.broadcast(verify_res, src=self.global_config.target_config.master_rank)
+    
+    # 3. 根據結果處理 Rollback 或繼續
+    # ... rollback logic ...
+```
+
+**時間軸實際執行流程**：
+
+```
+Iteration N (Draft Process):
+  T0: pearl_step() 開始
+  T0-T1: 生成 gamma 個 Token (for loop)
+  T1: verify() → broadcast to Target
+  T1-T2: 等待 Target 驗證結果
+  T2: 接收結果，處理 Rollback（若需要）
+
+Iteration N (Target Process) - 同時進行:
+  T0: pearl_step() 開始
+  T0-T1: 驗證「上一輪」的 gamma 個 Token  ← 與 Draft 的 T0-T1 重疊
+  T1: broadcast 驗證結果給 Draft
+  
+關鍵：Target 的 T0-T1（驗證上一輪）與 Draft 的 T0-T1（生成本輪）重疊！
+```
+
+**同步 vs 非同步的程式碼差異**：
+
+**同步方式（傳統）**：
+```python
+# 偽代碼
+def pearl_step():
+    draft_tokens = draft_model.generate(gamma)  # Draft 生成
+    wait()  # ← Draft 閒置等待
+    accept = target_model.verify(draft_tokens)  # Target 驗證
+    if not accept:
+        rollback()
+```
+
+**非同步方式（nano-PEARL）**：
+```python
+# 實際程式碼
+def pearl_step(self):  # Draft Process
+    # Draft 持續生成，不等待上一輪驗證
+    for _ in range(self.gamma):
+        logits = self.run_model(...)  # ← 生成時，Target 在驗證上一輪
+        seq.append_token(token_id)
+    
+    self.verify(seqs)  # 僅在此處同步
+
+def pearl_step(self):  # Target Process（獨立運行）
+    # Target 驗證時，Draft 在生成下一輪
+    logits = self.run_model(...)  # ← 驗證上一輪，Draft 在生成本輪
+    self.verify(logits, seqs, temperatures)
+```
+
+**效能提升原因**：
+1. **Draft 生成**與**Target 驗證**的計算**時間重疊**（Overlap）
+2. 只要 `Draft Speed > Target Speed`，Target 永遠有 Token 可驗證
+3. Draft 的延遲被 Target 的計算時間**隱藏**（Hidden Latency）
+
+
 ---
 
 ### 4️⃣ Gamma 自動調優

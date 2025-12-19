@@ -252,7 +252,6 @@ class PearlScheduler:
 
                         # Convert Sampling Params
                         p = PearlSamplingParams(
-                            n=1, # always 1 for now
                             temperature=sub_msg.sampling_params.temperature,
                             max_tokens=sub_msg.sampling_params.max_tokens,
                             ignore_eos=sub_msg.sampling_params.ignore_eos,

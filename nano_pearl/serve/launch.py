@@ -12,47 +12,36 @@ from nano_pearl.serve.pearl_scheduler import run_pearl_scheduler
 logger = init_logger(__name__, "PearlLauncher")
 
 def launch_server(run_shell: bool = False) -> None:
-    # 1. Save original argv
-    original_argv = sys.argv.copy()
-    
-    # 2. Parse Args (includes PEARL-specific arguments)
+    # 1. Parse Args (includes PEARL-specific arguments)
     pearl_args, run_shell = parse_args(sys.argv[1:], run_shell)
+
+    # 2. Log parsed arguments
+    logger.info(f"PEARL Server Config:")
+    logger.info(f"  Draft Model: {pearl_args.draft_model_path} (TP={pearl_args.draft_tp_size})")
+    logger.info(f"  Target Model: {pearl_args.model_path} (TP={pearl_args.target_tp_size})")
+    logger.info(f"  Total TP Size: {pearl_args.tp_info.size}")
+    logger.info(f"  Gamma: {pearl_args.gamma}")
+    logger.info(f"  Max Batch Tokens: {pearl_args.max_num_batched_tokens}")
+    logger.info(f"  Cache Type: {pearl_args.cache_type}")
+    logger.info(f"  Server: {pearl_args.server_host}:{pearl_args.server_port}")
     
-    # 3. ⭐ CRITICAL FIX: Clean sys.argv before calling run_api_server
-    #    Remove PEARL-specific arguments that minisgl doesn't recognize
-    #    This prevents "unrecognized arguments" error in minisgl's internal parsing
-    cleaned_argv = [original_argv[0]]  # Keep program name
-    
-    # Add only minisgl-compatible arguments
-    cleaned_argv.extend(['--model-path', pearl_args.model_path])
-    cleaned_argv.extend(['--host', pearl_args.server_host])
-    cleaned_argv.extend(['--port', str(pearl_args.server_port)])
-    cleaned_argv.extend(['--tp-size', str(pearl_args.tp_size)])
-    
-    if hasattr(pearl_args, 'tokenizer_path') and pearl_args.tokenizer_path:
-        cleaned_argv.extend(['--tokenizer-path', pearl_args.tokenizer_path])
-    
-    # Replace sys.argv with cleaned version
-    sys.argv = cleaned_argv
-    logger.info(f"Cleaned sys.argv: {sys.argv}")
-    
+    # 3. Define subprocess starter
     def start_subprocess() -> None:
         mp.set_start_method("spawn", force=True)
-        
+
         ack_queue = mp.Queue()
-        
-        # 1. Start Scheduler (ONE process)
-        # Note: pearl_args passed
+
+        # Start PEARL Scheduler (ONE process)
         mp.Process(
             target=run_pearl_scheduler,
             args=(pearl_args, ack_queue),
             daemon=False,
             name="pearl-scheduler"
         ).start()
-        
-        # 2. Start Tokenizers (Standard minisgl)
+
+        # Start Tokenizers (Standard minisgl)
         num_tokenizers = pearl_args.num_tokenizer
-        
+
         # Detokenizer
         mp.Process(
             target=tokenize_worker,
@@ -88,17 +77,13 @@ def launch_server(run_shell: bool = False) -> None:
                 name=f"minisgl-tokenizer-{i}",
             ).start()
             
-        # Wait for ACKs
-        # 1 scheduler + n tokenizers + 1 detokenizer
+        # Wait for ACKs: 1 scheduler + n tokenizers + 1 detokenizer
         for _ in range(num_tokenizers + 2):
             msg = ack_queue.get()
             logger.info(msg)
-    
-    try:        
-        run_api_server(pearl_args, start_subprocess, run_shell=run_shell)
-    finally:
-        # Restore original argv (optional, for cleanup)
-        sys.argv = original_argv
+
+    # 4. Start API server
+    run_api_server(pearl_args, start_subprocess, run_shell=run_shell)
 
 if __name__ == "__main__":
     launch_server()

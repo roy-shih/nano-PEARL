@@ -17,6 +17,7 @@ class ServerArgs(SchedulerConfig):
     server_port: int = 1919
     num_tokenizer: int = 0
     silent_output: bool = False
+    served_model_name: str | None = None  # Custom name for the model in API responses
 
     @property
     def share_tokenizer(self) -> bool:
@@ -198,6 +199,13 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
         help="Run the server in shell mode.",
     )
 
+    parser.add_argument(
+        "--served-model-name",
+        type=str,
+        default=None,
+        help="The model name used in the API. If not specified, the model path will be used.",
+    )
+
     # Parse arguments
     kwargs = parser.parse_args(args).__dict__.copy()
 
@@ -227,6 +235,12 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[ServerArgs, bo
 
     kwargs["tp_info"] = DistributedInfo(0, kwargs["tensor_parallel_size"])
     del kwargs["tensor_parallel_size"]
+
+    # Set default served_model_name if not provided
+    if kwargs.get("served_model_name") is None:
+        # Extract a friendly name from model_path (use the last directory name)
+        model_path = kwargs["model_path"]
+        kwargs["served_model_name"] = os.path.basename(model_path.rstrip("/"))
 
     result = ServerArgs(**kwargs)
     logger = init_logger(__name__)

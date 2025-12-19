@@ -293,7 +293,8 @@ async def v1_completions(req: OpenAICompletionRequest):
 @app.get("/v1/models")
 async def available_models():
     state = get_global_state()
-    return ModelList(data=[ModelCard(id=state.config.model_path, root=state.config.model_path)])
+    model_name = state.config.served_model_name or state.config.model_path
+    return ModelList(data=[ModelCard(id=model_name, root=state.config.model_path)])
 
 
 async def shell_completion(req: OpenAICompletionRequest):

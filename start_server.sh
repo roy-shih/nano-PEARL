@@ -21,12 +21,13 @@ DRAFT_MODEL="/home/ubuntu/models/meta-llama/Llama-3.3-8B-Instruct"    # Draft mo
 TARGET_MODEL="/home/ubuntu/models/meta-llama/Llama-3.3-70B-Instruct"  # Target model (larger)
 
 # 3. 效能參數設定
-DRAFT_TP=1        # Draft Model 的 Tensor Parallelism 大小
-TARGET_TP=4       # Target Model 的 Tensor Parallelism 大小
-GAMMA=-1          # 投機步長（-1 = 自動調整）
-MAX_BATCH=16384   # 最大批次 Token 數
-MAX_REQS=256      # 最大並發請求數
-PORT=8000         # API Server 埠號
+DRAFT_TP=1              # Draft Model 的 Tensor Parallelism 大小
+TARGET_TP=4             # Target Model 的 Tensor Parallelism 大小
+GAMMA=-1                # 投機步長（-1 = 自動調整）
+MAX_BATCH=16384         # 最大批次 Token 數
+MAX_REQS=256            # 最大並發請求數
+PORT=8000               # API Server 埠號
+MODEL_NAME="nano-pearl" # API 中顯示的模型名稱（可自定義）
 
 # 4. 啟動服務
 python3 -m nano_pearl.serve.launch \
@@ -39,7 +40,8 @@ python3 -m nano_pearl.serve.launch \
     --max-running-requests ${MAX_REQS} \
     --port ${PORT} \
     --host 0.0.0.0 \
-    --mem-fraction-static 0.9
+    --mem-fraction-static 0.9 \
+    --served-model-name "${MODEL_NAME}"
 
 # 服務啟動後，可透過以下方式測試：
 # curl http://localhost:8000/v1/completions \

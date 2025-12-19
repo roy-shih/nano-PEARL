@@ -56,6 +56,8 @@ def parse_args(args: List[str], run_shell: bool = False) -> Tuple[PearlServerArg
     parser.add_argument("--host", type=str, default="127.0.0.1", dest="server_host")
     parser.add_argument("--port", type=int, default=1919, dest="server_port")
     parser.add_argument("--num-tokenizer", type=int, default=0)
+    parser.add_argument("--served-model-name", type=str, default=None,
+                        help="Custom model name for API responses (default: auto from model path)")
     parser.add_argument("--max-prefill-length", type=int, default=16384, dest="max_extend_tokens")
     parser.add_argument("--mem-fraction-static", type=float, default=0.9, dest="memory_ratio") # Default naming in vllm/others
     parser.add_argument("--max-running-requests", type=int, default=512, dest="max_running_req")

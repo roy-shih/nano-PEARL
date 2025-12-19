@@ -83,7 +83,7 @@ class BlockManager:
         cached_block_ids = []
         if cached_indices.numel() > 0:
             flat = cached_indices.tolist()
-            matched_len = handle.prefix_len
+            matched_len = handle.cached_len
             dims = matched_len // self.block_size
             
             if dims > 0:

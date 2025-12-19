@@ -29,7 +29,9 @@ class Sequence:
         self.ignore_eos = sampling_params.ignore_eos
         self.pre_verify = True
         self.num_acc_tokens = []
+        self.num_acc_tokens = []
         self.cur_acc_tokens = 0
+        self.reported_tokens = 0
 
     def __len__(self):
         return self.num_tokens

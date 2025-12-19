@@ -429,6 +429,10 @@ def pearl_step(self):  # Target Process（獨立運行）
 2. 只要 `Draft Speed > Target Speed`，Target 永遠有 Token 可驗證
 3. Draft 的延遲被 Target 的計算時間**隱藏**（Hidden Latency）
 
+> 📐 **數學證明**：完整的吞吐量理論分析與證明，請參考 [docs/THROUGHPUT_PROOF.md](docs/THROUGHPUT_PROOF.md)
+> 
+> **核心結論**：當 Draft Model 的 Acceptance Rate $\alpha \geq 1 - \frac{1}{\gamma}$ 時，吞吐量 $\geq S_{target}$（達到理論上限）
+
 
 ---
 

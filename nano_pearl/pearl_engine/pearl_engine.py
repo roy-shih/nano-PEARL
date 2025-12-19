@@ -51,6 +51,12 @@ class Controller:
         data = self.target_shm.buf[4:n+4]
         output, elapsed_time = pickle.loads(data)
         return output, elapsed_time
+        
+    def read_step_output(self):
+        n = int.from_bytes(self.target_shm.buf[0:4], "little")
+        data = self.target_shm.buf[4:n+4]
+        output_list = pickle.loads(data)
+        return output_list
 
 
 class PEARLEngine:    
@@ -106,7 +112,10 @@ class PEARLEngine:
         self.controller.target_shm.unlink()
         
 
-    def add_request(self, prompt: str | list[int], sampling_params: SamplingParams):
+    def add_request(self, prompt: str | list[int], sampling_params: SamplingParams) -> int:
+        """
+        Add request and return the sequence ID.
+        """
         if isinstance(prompt, str):
             prompt = self.tokenizer.apply_chat_template(
                 [{"role": "user", "content": prompt}],
@@ -119,6 +128,7 @@ class PEARLEngine:
         self.controller.write_target_shm("add_request", seq)
         self.control_event.wait()
         self.control_event.clear()
+        return seq.seq_id
     
     def generate(self):
         self.controller.write_draft_shm("pearl_generate")
@@ -162,3 +172,12 @@ class PEARLEngine:
         num_tokens = [len(t) for t in token_ids]
 
         return output_text, num_tokens, num_acc_tokens, time
+
+    def step(self):
+        self.controller.write_draft_shm("smart_step")
+        self.controller.write_target_shm("smart_step")
+        self.control_event.wait()
+        self.control_event.clear()
+        
+        return self.controller.read_step_output()
+

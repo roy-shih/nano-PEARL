@@ -93,7 +93,3 @@ class Scheduler:
         while self.finished:
             seq = self.finished.pop()
             self.block_manager.deallocate(seq)
-        self.block_manager.hash_to_block_id.clear()
-        for block in self.block_manager.blocks:
-            block.hash = -1
-            block.token_ids = []

@@ -481,6 +481,55 @@ class ModelRunnerBase:
     def pearl_step(self):
         pass
 
+    def smart_step(self):
+        """
+        Intelligently switch between prefill and decode steps.
+        And return the incremental output for streaming.
+        """
+        if self.scheduler.waiting:
+            self.prefill()
+        elif self.scheduler.running:
+            self.pearl_step()
+
+        # Collect output
+        if self.rank == self.global_config.target_config.master_rank:
+            output_list = []
+            
+            # Helper to process seq
+            def process_seq(seq, finished=False):
+                new_tokens_count = len(seq.completion_token_ids) - seq.reported_tokens
+                if new_tokens_count > 0:
+                     new_tokens = seq.completion_token_ids[seq.reported_tokens:]
+                     seq.reported_tokens += new_tokens_count
+                     return (seq.seq_id, new_tokens, finished)
+                elif finished:
+                     return (seq.seq_id, [], finished)
+                return None
+
+            for seq in self.scheduler.running:
+                res = process_seq(seq, finished=False)
+                if res:
+                    output_list.append(res)
+            
+            # Finished seqs are moved to self.scheduler.finished
+            # We need to report them and then clear them
+            for seq in self.scheduler.finished:
+                res = process_seq(seq, finished=True)
+                if res:
+                    output_list.append(res)
+            
+            # Clean up finished
+            self.scheduler.finished.clear()
+            
+            # Write to SHM
+            data = pickle.dumps(output_list)
+            n = len(data)
+            self.shm.buf[0:4] = n.to_bytes(4, "little")
+            self.shm.buf[4:n+4] = data
+
+        dist.barrier()
+
+
 
 class DraftModelRunner(ModelRunnerBase):
     def __init__(self, config: PEARLConfig, rank: int, event: Event, control_event: Event):

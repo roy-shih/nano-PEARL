@@ -203,10 +203,21 @@ class ModelRunnerBase:
         block_tables = None
         for seq in seqs:
             seqlen = len(seq)
-            input_ids.extend(seq[seq.num_cached_tokens:])
-            positions.extend(list(range(seq.num_cached_tokens, seqlen)))
             seqlen_q = seqlen - seq.num_cached_tokens
             seqlen_k = seqlen
+
+            # CRITICAL FIX: Ensure seqlen_q is at least 1 to avoid CUDA errors in FlashAttention
+            # This can happen when radix cache matches the entire sequence (e.g., all-zero warmup sequences)
+            if seqlen_q < 1:
+                # Force at least one token to be processed
+                seqlen_q = 1
+                # Adjust the range accordingly - take the last token
+                input_ids.extend(seq[seqlen - 1:seqlen])
+                positions.extend([seqlen - 1])
+            else:
+                input_ids.extend(seq[seq.num_cached_tokens:])
+                positions.extend(list(range(seq.num_cached_tokens, seqlen)))
+
             cu_seqlens_q.append(cu_seqlens_q[-1] + seqlen_q)
             cu_seqlens_k.append(cu_seqlens_k[-1] + seqlen_k)
             max_seqlen_q = max(seqlen_q, max_seqlen_q)

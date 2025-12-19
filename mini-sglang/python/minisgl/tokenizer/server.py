@@ -78,7 +78,9 @@ def tokenize_worker(
             tokenize_msg = [m for m in pending_msg if isinstance(m, TokenizeMsg)]
             assert len(detokenize_msg) + len(tokenize_msg) == len(pending_msg)
             if len(detokenize_msg) > 0:
+                logger.info(f"Tokenizer: processing {len(detokenize_msg)} detokenize messages")
                 replies = detokenize_manager.detokenize(detokenize_msg)
+                logger.info(f"Tokenizer: detokenized {len(replies)} replies")
                 batch_output = BatchFrontendMsg(
                     data=[
                         UserReply(
@@ -93,6 +95,7 @@ def tokenize_worker(
                     batch_output = batch_output.data[0]
                 logger.info(f"Tokenizer -> frontend put {len(batch_output.data if isinstance(batch_output, BatchFrontendMsg) else [batch_output])} replies for uids={[r.uid for r in batch_output.data] if isinstance(batch_output, BatchFrontendMsg) else [batch_output.uid]}")
                 send_frontend.put(batch_output)
+                logger.info("Tokenizer: sent replies to frontend")
 
             if len(tokenize_msg) > 0:
                 tensors = tokenize_manager.tokenize(tokenize_msg)

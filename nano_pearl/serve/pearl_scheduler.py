@@ -202,38 +202,44 @@ class PearlScheduler:
         poller.register(receiver, zmq.POLLIN)
         
         logger.info(f"PearlScheduler listening on {self.args.zmq_backend_addr}")
-        
+
         has_running_reqs = False
-        
+
         while True:
             # Poll with timeout
             # If has_running_reqs, timeout=0 (non-blocking).
             # Else timeout=None (blocking).
-            
+
             timeout = 0 if has_running_reqs else None
             socks = dict(poller.poll(timeout))
-            
+
             if receiver in socks and socks[receiver] == zmq.POLLIN:
                 # Receive batch
                 # Loop to get multiple?
                 # Just get one batch msg.
-                
+
                 # ZMQ Recv
+                logger.info("PearlScheduler: receiving message from backend queue")
                 raw_msg = receiver.recv()
+                logger.info(f"PearlScheduler: received {len(raw_msg)} bytes")
                 # Decode using msgpack
                 json = msgpack.unpackb(raw_msg, raw=False)
+                logger.info(f"PearlScheduler: unpacked json type={type(json)}")
                 msg = BatchBackendMsg.decoder(json)
+                logger.info(f"PearlScheduler: decoded message type={type(msg).__name__}")
                 
                 if isinstance(msg, ExitMsg):
                     break
                 
                 if isinstance(msg, BatchBackendMsg):
+                    logger.info(f"PearlScheduler: processing BatchBackendMsg with {len(msg.data)} sub-messages")
                     for sub_msg in msg.data:
                         if isinstance(sub_msg, UserMsg):
+                            logger.info(f"PearlScheduler: received UserMsg uid={sub_msg.uid} input_ids_len={len(sub_msg.input_ids)}")
                             # Convert to PEARL sequence
                             # sub_msg.input_ids (list[int])
                             # sub_msg.sampling_params (minisgl.core.SamplingParams)
-                            
+
                             # Convert Sampling Params
                             p = PearlSamplingParams(
                                 n=1, # always 1 for now
@@ -241,28 +247,33 @@ class PearlScheduler:
                                 max_tokens=sub_msg.sampling_params.max_tokens,
                                 ignore_eos=sub_msg.sampling_params.ignore_eos,
                             )
-                            
+
                             sid = self.engine.add_request(sub_msg.input_ids, p)
+                            logger.info(f"PearlScheduler: added request to engine sid={sid} uid={sub_msg.uid}")
                             # We might need to map sid to uid if PEARL generates its own sid?
                             # PEARL Sequence generates its own ID.
                             # We need to map it back to `sub_msg.uid`.
-                            
+
                             if not hasattr(self, 'sid_to_uid'):
                                 self.sid_to_uid = {}
                             self.sid_to_uid[sid] = sub_msg.uid
-                            
+
                             has_running_reqs = True
             
             # Run Step if running
             if has_running_reqs:
+                logger.debug("PearlScheduler: calling engine.step()")
                 output_list = self.engine.step()
+                logger.info(f"PearlScheduler: engine.step() returned {len(output_list) if output_list else 0} outputs")
                 # output_list: [(seq_id, new_tokens, finished)]
-                
+
                 if output_list:
                     # Prepare BatchTokenizerMsg
                     replies = []
                     for sid, tokens, finished in output_list:
+                        logger.info(f"PearlScheduler: processing output sid={sid} tokens={len(tokens)} finished={finished}")
                         uid = self.sid_to_uid.get(sid)
+                        logger.info(f"PearlScheduler: mapped sid={sid} to uid={uid}")
                         if uid is not None:
                             # Send one DetokenizeMsg PER TOKEN?
                             # Frontend expects streaming per token?
@@ -296,17 +307,25 @@ class PearlScheduler:
                     
                     if replies:
                         # Send batch (pack with msgpack)
+                        logger.info(f"PearlScheduler: sending {len(replies)} replies to detokenizer")
                         batch_reply = BatchTokenizerMsg(data=replies)
-                        sender.send(msgpack.packb(BatchTokenizerMsg.encoder(batch_reply), use_bin_type=True))
+                        packed = msgpack.packb(BatchTokenizerMsg.encoder(batch_reply), use_bin_type=True)
+                        logger.info(f"PearlScheduler: packed message size={len(packed)} bytes")
+                        sender.send(packed)
+                        logger.info("PearlScheduler: message sent to detokenizer")
+                    else:
+                        logger.warning("PearlScheduler: output_list not empty but no replies generated")
                 else:
                     # No output? verify if finished
                     # If empty output but requests are running, it means they are still processing (gamma steps).
+                    logger.debug("PearlScheduler: engine.step() returned empty output, requests still running")
                     pass
-                
+
                 # Check if we should stop loop (if we can detect emptiness)
                 # PEARL doesn't expose `is_finished()` nicely on Engine.
                 # But we clean up `sid_to_uid`.
                 if not self.sid_to_uid:
+                    logger.info("PearlScheduler: no more running requests")
                     has_running_reqs = False
 
         self.engine.exit()

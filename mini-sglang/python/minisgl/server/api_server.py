@@ -113,12 +113,17 @@ class FrontendManager:
         return uid
 
     async def listen(self):
+        logger.info("FrontendManager.listen: starting to listen for responses")
         while True:
+            logger.debug("FrontendManager.listen: waiting for message from tokenizer")
             msg = await self.recv_tokenizer.get()
+            logger.info(f"FrontendManager.listen: received message type={type(msg).__name__}")
             for msg in _unwrap_msg(msg):
-                assert msg.uid in self.ack_map
+                logger.info(f"FrontendManager.listen: processing UserReply uid={msg.uid} finished={msg.finished} output_len={len(msg.incremental_output)}")
+                assert msg.uid in self.ack_map, f"UID {msg.uid} not in ack_map"
                 self.ack_map[msg.uid].append(msg)
                 self.event_map[msg.uid].set()
+                logger.info(f"FrontendManager.listen: set event for uid={msg.uid}")
 
     def _create_listener_once(self):
         if not self.initialized:
@@ -156,8 +161,10 @@ class FrontendManager:
         logger.debug("Finished streaming response for user %s", uid)
 
     async def stream_chat_completions(self, uid: int):
+        logger.info(f"stream_chat_completions: starting stream for uid={uid}")
         first_chunk = True
         async for ack in self.wait_for_ack(uid):
+            logger.info(f"stream_chat_completions: received ack for uid={uid} output={repr(ack.incremental_output)} finished={ack.finished}")
             delta = {}
             if first_chunk:
                 delta["role"] = "assistant"
@@ -170,9 +177,11 @@ class FrontendManager:
                 "object": "text_completion.chunk",
                 "choices": [{"delta": delta, "index": 0, "finish_reason": None}],
             }
+            logger.debug(f"stream_chat_completions: yielding chunk for uid={uid}")
             yield f"data: {json.dumps(chunk)}\n\n".encode()
 
             if ack.finished:
+                logger.info(f"stream_chat_completions: stream finished for uid={uid}")
                 break
 
         # send final finish_reason
@@ -183,7 +192,7 @@ class FrontendManager:
         }
         yield f"data: {json.dumps(end_chunk)}\n\n".encode()
         yield b"data: [DONE]\n\n"
-        logger.debug("Finished streaming response for user %s", uid)
+        logger.info("Finished streaming response for user %s", uid)
 
     async def abort_user(self, uid: int):
         await asyncio.sleep(0.1)

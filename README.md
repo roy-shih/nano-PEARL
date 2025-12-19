@@ -71,42 +71,43 @@ pip install git+https://github.com/smart-lty/nano-PEARL.git # from github
 > ⚠️ If the installation of flash-attn is very slow, we strongly recommend you to download a whl file and **build flash attn from wheel**.
 </details>
 
-## 🚀 Quick Start
+## 🌐 Online Serving (NEW!)
 
-The `nano-PEARL` API mirrors `vLLM` / `nano-vllm`'s interface. The main difference is in the `LLM` engine initialization, where you must **specify both a target model and a draft model**, along with their respective tensor-parallel (TP) sizes. Detailed Quick Start is included in [Quick Start](https://smart-lty.github.io/nano-PEARL/quickstart.html).
+nano-PEARL now supports **OpenAI-compatible API Server** for production deployment! 🎉
 
-See `example.py` for usage: a minimal example of running parallel speculative decoding on 2 GPUs (e.g., 1 for the target model, 1 for the draft model):
+```bash
+# Start the server
+python3 -m nano_pearl.serve.launch \
+    --model-path /path/to/Llama-3.1-70B \
+    --draft-model-path /path/to/Llama-3.2-3B \
+    --draft-tp-size 1 \
+    --target-tp-size 4 \
+    --port 8000
 
-```python
-from nano_pearl import PEARLConfig, PEARLEngine, SamplingParams, logger
-
-def main():
-    draft_model_path = "/path/to/draft/model"
-    target_model_path = "/path/to/target/model"
-    
-    config = PEARLConfig(draft_model_path, target_model_path, draft_tensor_parallel_size=1, target_tensor_parallel_size=1, gpu_memory_utilization=0.9)
-    engine = PEARLEngine(config)
-    
-    prompt = "Explain quantum computing in simple terms"
-    sampling_params = SamplingParams(temperature=0.0, max_tokens=256, ignore_eos=False)
-    engine.add_request(prompt, sampling_params)
-    
-    output_text, num_tokens, num_acc_tokens, elapsed_time = engine.generate()
+# Test with curl
+curl http://localhost:8000/v1/completions \
+  -H "Content-Type: application/json" \
+  -d '{"prompt": "Hello!", "max_tokens": 100, "stream": true}'
 ```
 
-## 📊 BenchMark Results
+**Key Features**:
+- ✅ **Continuous Batching**: Dynamic Prefill/Decode switching for maximum throughput
+- ✅ **Streaming Support**: Real-time token streaming via SSE
+- ✅ **Radix Tree KV Cache**: Efficient prefix sharing for multi-turn conversations
+- ✅ **Hash-based Cache Option**: Use `--no-use-radix-cache` for simpler scenarios
 
-We conduct extensive evaluation of nano-PEARL on various datasets / Hardware settings. Below is the evaluation of nano-PEARL with NVIDIA H200 on HumanEval with batch size 32. nano-PEARL achieves a maximal $3.06\times$ throughput speedup with **3546.72 tok/s** for 70B LLMs!
-
-Feel Free to check more benchmark results at our [benchmark page](https://smart-lty.github.io/nano-PEARL/benchmark.html)!
-
-![bench_example](static/benchmark_example.png)
+📖 **Documentation**:
+- [README_FEATURES.md](README_FEATURES.md) - Detailed technical implementation
+- [QUICKSTART.md](QUICKSTART.md) - Quick start guide with examples  
+- [CACHE_MODES.md](CACHE_MODES.md) - Cache mode comparison & tuning
 
 ## 📋 TODOs
 
 - [x]  **Dynamic TP Size**: Support dynamic TP size, including TP=6/7, hence the 8 GPUs can be fully used!
+- [x]  **Continuous Batching**: Support continuous batching and chunked prefill. ✅ (Online Serving)
+- [x]  **Online Serving**: OpenAI-compatible API Server with streaming ✅
+- [x]  **Radix Tree KV Cache**: Advanced prefix caching for multi-turn chat ✅
 - [ ]  **Draft Model Temperature**: Support setting a non-zero temperature for the draft model.
-- [ ]  **Continuous Batching**: Support continuous batching and chunked prefill.
 - [ ]  **Adaptive Gamma**: Support dynamic `gamma` tuning based on context size and model's performance.
 - [ ]  **PEARL-2**: Support fine-tuning / distilling a PEARL-specific draft model for further acceleration.
 

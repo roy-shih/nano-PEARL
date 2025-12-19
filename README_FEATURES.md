@@ -46,6 +46,32 @@
 #### 原理
 Radix Tree 是一種 Trie 的壓縮版本，能高效儲存與檢索具有共同前綴的序列。當多個請求共享相同的 System Prompt 或 Few-shot Examples 時，它們能重用相同的 KV Cache Block。
 
+#### 模式切換
+
+nano-PEARL 支援兩種 KV Cache 模式，可透過參數控制：
+
+**1. Radix Tree 模式（預設，推薦）**
+```bash
+# 預設啟用，無需額外參數
+python3 -m nano_pearl.serve.launch \
+    --model-path /path/to/target \
+    --draft-model-path /path/to/draft
+```
+
+**2. Hash-based 模式（傳統實作）**
+```bash
+# 使用 --no-use-radix-cache 切換
+python3 -m nano_pearl.serve.launch \
+    --model-path /path/to/target \
+    --draft-model-path /path/to/draft \
+    --no-use-radix-cache
+```
+
+**比較**：
+- **Radix Tree**：適合多輪對話、共享前綴場景，快取命中率高
+- **Hash-based**：簡單穩定，記憶體開銷低，適合單次請求
+- 詳細說明請參考 [CACHE_MODES.md](CACHE_MODES.md)
+
 #### 程式碼實作 (`nano_pearl/pearl_engine/block_manager.py`)
 
 **舊版 (Hash-based)**：

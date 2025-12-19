@@ -230,35 +230,45 @@ class PearlScheduler:
                 
                 if isinstance(msg, ExitMsg):
                     break
-                
+
+                # Handle both single UserMsg and BatchBackendMsg
+                msgs_to_process = []
                 if isinstance(msg, BatchBackendMsg):
                     logger.info(f"PearlScheduler: processing BatchBackendMsg with {len(msg.data)} sub-messages")
-                    for sub_msg in msg.data:
-                        if isinstance(sub_msg, UserMsg):
-                            logger.info(f"PearlScheduler: received UserMsg uid={sub_msg.uid} input_ids_len={len(sub_msg.input_ids)}")
-                            # Convert to PEARL sequence
-                            # sub_msg.input_ids (list[int])
-                            # sub_msg.sampling_params (minisgl.core.SamplingParams)
+                    msgs_to_process = msg.data
+                elif isinstance(msg, UserMsg):
+                    logger.info(f"PearlScheduler: processing single UserMsg")
+                    msgs_to_process = [msg]
+                else:
+                    logger.warning(f"PearlScheduler: unexpected message type {type(msg).__name__}")
+                    continue
 
-                            # Convert Sampling Params
-                            p = PearlSamplingParams(
-                                n=1, # always 1 for now
-                                temperature=sub_msg.sampling_params.temperature,
-                                max_tokens=sub_msg.sampling_params.max_tokens,
-                                ignore_eos=sub_msg.sampling_params.ignore_eos,
-                            )
+                for sub_msg in msgs_to_process:
+                    if isinstance(sub_msg, UserMsg):
+                        logger.info(f"PearlScheduler: received UserMsg uid={sub_msg.uid} input_ids_len={len(sub_msg.input_ids)}")
+                        # Convert to PEARL sequence
+                        # sub_msg.input_ids (list[int])
+                        # sub_msg.sampling_params (minisgl.core.SamplingParams)
 
-                            sid = self.engine.add_request(sub_msg.input_ids, p)
-                            logger.info(f"PearlScheduler: added request to engine sid={sid} uid={sub_msg.uid}")
-                            # We might need to map sid to uid if PEARL generates its own sid?
-                            # PEARL Sequence generates its own ID.
-                            # We need to map it back to `sub_msg.uid`.
+                        # Convert Sampling Params
+                        p = PearlSamplingParams(
+                            n=1, # always 1 for now
+                            temperature=sub_msg.sampling_params.temperature,
+                            max_tokens=sub_msg.sampling_params.max_tokens,
+                            ignore_eos=sub_msg.sampling_params.ignore_eos,
+                        )
 
-                            if not hasattr(self, 'sid_to_uid'):
-                                self.sid_to_uid = {}
-                            self.sid_to_uid[sid] = sub_msg.uid
+                        sid = self.engine.add_request(sub_msg.input_ids, p)
+                        logger.info(f"PearlScheduler: added request to engine sid={sid} uid={sub_msg.uid}")
+                        # We might need to map sid to uid if PEARL generates its own sid?
+                        # PEARL Sequence generates its own ID.
+                        # We need to map it back to `sub_msg.uid`.
 
-                            has_running_reqs = True
+                        if not hasattr(self, 'sid_to_uid'):
+                            self.sid_to_uid = {}
+                        self.sid_to_uid[sid] = sub_msg.uid
+
+                        has_running_reqs = True
             
             # Run Step if running
             if has_running_reqs:
